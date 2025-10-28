@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Button, Alert, TextInput, Platform, StatusBar, ScrollView, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { initDB, addEntry, statsToday, last7DaysAverages, last30DaysAverage, last3MonthsAverages, last6MonthsAverages, lastYearAverages, getAllEntries, deleteEntry, deleteAllEntries, Entry, addAngerNote, getAllAngerNotes, deleteAngerNote, deleteAllAngerNotes, AngerNote } from './src/db';
 import BarChart from './src/components/BarChart';
 import AuthScreen from './src/components/AuthScreen';
@@ -39,7 +40,7 @@ export default function App(){
   async function onSave(){
     const n = Math.max(1, Math.min(10, Number(intensity) || 5));
     await addEntry(n);
-    Alert.alert('Registro Guardado', `Nivel de enojo registrado: ${n}/10`);
+    // Sin confirmación - guardado silencioso
     setIntensity('5');
     await refresh();
   }
@@ -176,19 +177,30 @@ export default function App(){
         <View style={styles.inputCard}>
           <Text style={styles.inputLabel}>¿Cuál es tu nivel de enojo ahora?</Text>
           <Text style={styles.inputHint}>Escala del 1 (mínimo) al 10 (máximo)</Text>
-          <View style={styles.inputRow}>
-            <TextInput
-              value={intensity}
-              onChangeText={setIntensity}
-              keyboardType='numeric'
-              inputMode='numeric'
-              placeholder='5'
-              style={styles.input}
+          
+          <View style={styles.sliderContainer}>
+            <Text style={styles.sliderValue}>{Math.round(Number(intensity))}</Text>
+            <Slider
+              style={styles.slider}
+              minimumValue={1}
+              maximumValue={10}
+              step={1}
+              value={Number(intensity)}
+              onValueChange={(value) => setIntensity(value.toString())}
+              minimumTrackTintColor="#4c9"
+              maximumTrackTintColor="#ddd"
+              thumbTintColor="#4c9"
             />
-            <View style={styles.buttonWrapper}>
-              <Button title='Registrar' onPress={onSave} color="#4c9" />
+            <View style={styles.sliderLabels}>
+              <Text style={styles.sliderLabelText}>1</Text>
+              <Text style={styles.sliderLabelText}>5</Text>
+              <Text style={styles.sliderLabelText}>10</Text>
             </View>
           </View>
+          
+          <TouchableOpacity style={styles.saveButton} onPress={onSave}>
+            <Text style={styles.saveButtonText}>✓ Registrar Ahora</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.statsCard}>
@@ -425,6 +437,44 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
     marginBottom: 12,
+  },
+  sliderContainer: {
+    marginVertical: 16,
+    paddingHorizontal: 8,
+  },
+  sliderValue: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: '#4c9',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  slider: {
+    width: '100%',
+    height: 40,
+  },
+  sliderLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  sliderLabelText: {
+    fontSize: 12,
+    color: '#999',
+    fontWeight: '600',
+  },
+  saveButton: {
+    backgroundColor: '#4c9',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
   inputRow: {
     flexDirection: 'row',
