@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Button, Alert, TextInput, Platform, StatusBar, ScrollView, StyleSheet } from 'react-native';
 import { initDB, addEntry, statsToday, last7DaysAverages, last30DaysAverage, last3MonthsAverages, last6MonthsAverages, lastYearAverages } from './src/db';
 import BarChart from './src/components/BarChart';
-import AuthScreen from './src/components/AuthScreen';
+// import AuthScreen from './src/components/AuthScreen'; // Deshabilitado temporalmente
 
 export default function App(){
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // const [isAuthenticated, setIsAuthenticated] = useState(false); // Deshabilitado temporalmente
   const [intensity, setIntensity] = useState('5');
   const [today, setToday] = useState<{count:number; avg:number}>({count:0, avg:0});
   const [week, setWeek] = useState<{label:string, avg:number}[]>([]);
@@ -24,10 +24,10 @@ export default function App(){
   }
 
   useEffect(() => { 
-    if (isAuthenticated) {
+    // if (isAuthenticated) { // Deshabilitado temporalmente
       (async () => { await initDB(); await refresh(); })(); 
-    }
-  }, [isAuthenticated]);
+    // }
+  }, []); // Cambiado de [isAuthenticated] a []
 
   async function onSave(){
     const n = Math.max(1, Math.min(10, Number(intensity) || 5));
@@ -38,9 +38,10 @@ export default function App(){
   }
 
   // Si no está autenticado, mostrar pantalla de autenticación
-  if (!isAuthenticated) {
-    return <AuthScreen onAuthenticated={() => setIsAuthenticated(true)} />;
-  }
+  // DESHABILITADO TEMPORALMENTE PARA QUE COMPILE
+  // if (!isAuthenticated) {
+  //   return <AuthScreen onAuthenticated={() => setIsAuthenticated(true)} />;
+  // }
 
   return (
     <View style={styles.container}>
