@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { hasPin, verifyPin, savePin, hasBiometricHardware, authenticateWithBiometric } from '../security';
+import { hasPin, verifyPin, savePin } from '../security';
 
 interface AuthScreenProps {
   onAuthenticated: () => void;
@@ -11,7 +11,6 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const [isSettingUp, setIsSettingUp] = useState(false);
   const [confirmPin, setConfirmPin] = useState('');
   const [step, setStep] = useState<'input' | 'confirm'>('input');
-  const [hasBiometric, setHasBiometric] = useState(false);
 
   useEffect(() => {
     checkSetup();
@@ -20,21 +19,6 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   async function checkSetup() {
     const pinExists = await hasPin();
     setIsSettingUp(!pinExists);
-    
-    const bioAvailable = await hasBiometricHardware();
-    setHasBiometric(bioAvailable);
-    
-    // Si hay biometría disponible y ya tiene PIN, intentar autenticación automática
-    if (bioAvailable && pinExists) {
-      tryBiometric();
-    }
-  }
-
-  async function tryBiometric() {
-    const success = await authenticateWithBiometric();
-    if (success) {
-      onAuthenticated();
-    }
   }
 
   async function handleSubmit() {
@@ -108,15 +92,6 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           </Text>
         </TouchableOpacity>
 
-        {hasBiometric && !isSettingUp && (
-          <TouchableOpacity 
-            style={styles.biometricButton} 
-            onPress={tryBiometric}
-          >
-            <Text style={styles.biometricText}>🔐 Usar Huella/Face ID</Text>
-          </TouchableOpacity>
-        )}
-
         {isSettingUp && (
           <Text style={styles.infoText}>
             💡 Tu PIN se guardará de forma segura en tu dispositivo
@@ -186,19 +161,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
-  },
-  biometricButton: {
-    width: '100%',
-    backgroundColor: '#f0f0f0',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  biometricText: {
-    color: '#333',
-    fontSize: 14,
-    fontWeight: '600',
   },
   infoText: {
     fontSize: 12,
