@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 const PIN_KEY = 'user_pin';
 
@@ -22,4 +23,26 @@ export async function verifyPin(inputPin: string): Promise<boolean> {
 // Eliminar PIN
 export async function deletePin(): Promise<void> {
   await SecureStore.deleteItemAsync(PIN_KEY);
+}
+
+// Verificar si el dispositivo soporta biometría
+export async function hasBiometricHardware(): Promise<boolean> {
+  const compatible = await LocalAuthentication.hasHardwareAsync();
+  const enrolled = await LocalAuthentication.isEnrolledAsync();
+  return compatible && enrolled;
+}
+
+// Autenticar con biometría
+export async function authenticateWithBiometric(): Promise<boolean> {
+  try {
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage: 'Autenticar para acceder',
+      cancelLabel: 'Cancelar',
+      disableDeviceFallback: false,
+    });
+    return result.success;
+  } catch (error) {
+    console.error('Error en autenticación biométrica:', error);
+    return false;
+  }
 }

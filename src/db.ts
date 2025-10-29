@@ -9,7 +9,10 @@ export async function initDB(): Promise<void> {
       ts INTEGER NOT NULL,
       intensity INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS notes (
+  `);
+  
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS anger_notes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       ts INTEGER NOT NULL,
       note TEXT NOT NULL
@@ -220,7 +223,95 @@ export async function deleteAllEntries(): Promise<void> {
   await db.runAsync('DELETE FROM entries');
 }
 
-// ============== ANGER NOTES ==============
+// ========== FUNCIONES DE CONSULTA HISTÓRICA ==========
+
+// Obtener todos los años con registros
+export async function getAvailableYears(): Promise<number[]> {
+  const result = await db.getAllAsync<{ year: number }>(
+    `SELECT DISTINCT strftime('%Y', datetime(ts/1000, 'unixepoch')) as year 
+     FROM entries 
+     ORDER BY year DESC`
+  );
+  return result.map(r => Number(r.year));
+}
+
+// Estadísticas de un año específico (promedio mensual)
+export async function getYearStats(year: number): Promise<MonthAvg[]> {
+  const months: MonthAvg[] = [];
+  for (let month = 0; month < 12; month++) {
+    const avg = await averageForMonth(year, month);
+    months.push({ 
+      label: monthLabel(year, month), 
+      avg 
+    });
+  }
+  return months;
+}
+
+// Estadísticas de un mes específico (promedio diario)
+type DayStats = { day: number; label: string; avg: number; count: number };
+
+export async function getMonthStats(year: number, month: number): Promise<DayStats[]> {
+  const days: DayStats[] = [];
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month, day);
+    const start = startOfDay(date);
+    const end = endOfDay(date);
+    
+    const result = await db.getAllAsync<{ avg: number; cnt: number }>(
+      'SELECT AVG(intensity) as avg, COUNT(*) as cnt FROM entries WHERE ts BETWEEN ? AND ?',
+      [start, end]
+    );
+    
+    days.push({
+      day,
+      label: `${day}`,
+      avg: result[0]?.avg ? Number(Number(result[0].avg).toFixed(2)) : 0,
+      count: result[0]?.cnt ? Number(result[0].cnt) : 0
+    });
+  }
+  
+  return days;
+}
+
+// Estadísticas de un día específico
+export async function getDayStats(year: number, month: number, day: number): Promise<{ entries: Entry[]; avg: number; count: number }> {
+  const date = new Date(year, month, day);
+  const start = startOfDay(date);
+  const end = endOfDay(date);
+  
+  const entries = await db.getAllAsync<Entry>(
+    'SELECT id, ts, intensity FROM entries WHERE ts BETWEEN ? AND ? ORDER BY ts DESC',
+    [start, end]
+  );
+  
+  const result = await db.getAllAsync<{ avg: number; cnt: number }>(
+    'SELECT AVG(intensity) as avg, COUNT(*) as cnt FROM entries WHERE ts BETWEEN ? AND ?',
+    [start, end]
+  );
+  
+  return {
+    entries,
+    avg: result[0]?.avg ? Number(Number(result[0].avg).toFixed(2)) : 0,
+    count: result[0]?.cnt ? Number(result[0].cnt) : 0
+  };
+}
+
+// Obtener rango de fechas con registros
+export async function getDateRange(): Promise<{ oldest: number; newest: number }> {
+  const result = await db.getAllAsync<{ minTs: number; maxTs: number }>(
+    'SELECT MIN(ts) as minTs, MAX(ts) as maxTs FROM entries'
+  );
+  
+  return {
+    oldest: result[0]?.minTs || Date.now(),
+    newest: result[0]?.maxTs || Date.now()
+  };
+}
+
+// ========== FUNCIONES PARA ANGER NOTES ==========
 
 export type AngerNote = {
   id: number;
@@ -232,25 +323,25 @@ export type AngerNote = {
 export async function addAngerNote(note: string): Promise<void> {
   const ts = Date.now();
   await db.runAsync(
-    'INSERT INTO notes (ts, note) VALUES (?, ?)',
+    'INSERT INTO anger_notes (ts, note) VALUES (?, ?)',
     [ts, note]
   );
 }
 
-// Obtener todas las notas ordenadas por fecha (más recientes primero)
+// Obtener todas las notas
 export async function getAllAngerNotes(): Promise<AngerNote[]> {
   const result = await db.getAllAsync<AngerNote>(
-    'SELECT id, ts, note FROM notes ORDER BY ts DESC'
+    'SELECT id, ts, note FROM anger_notes ORDER BY ts DESC'
   );
   return result;
 }
 
 // Borrar una nota individual
 export async function deleteAngerNote(id: number): Promise<void> {
-  await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
+  await db.runAsync('DELETE FROM anger_notes WHERE id = ?', [id]);
 }
 
 // Borrar todas las notas
 export async function deleteAllAngerNotes(): Promise<void> {
-  await db.runAsync('DELETE FROM notes');
+  await db.runAsync('DELETE FROM anger_notes');
 }

@@ -4,6 +4,7 @@ import Slider from '@react-native-community/slider';
 import { initDB, addEntry, statsToday, last7DaysAverages, last30DaysAverage, last3MonthsAverages, last6MonthsAverages, lastYearAverages, getAllEntries, deleteEntry, deleteAllEntries, Entry, addAngerNote, getAllAngerNotes, deleteAngerNote, deleteAllAngerNotes, AngerNote } from './src/db';
 import BarChart from './src/components/BarChart';
 import AuthScreen from './src/components/AuthScreen';
+import HistoryNavigator from './src/components/HistoryNavigator';
 
 export default function App(){
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -19,6 +20,7 @@ export default function App(){
   const [angerNotes, setAngerNotes] = useState<AngerNote[]>([]);
   const [showNotes, setShowNotes] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
 
   async function refresh(){
     setToday(await statsToday());
@@ -98,12 +100,11 @@ export default function App(){
 
   async function onSaveNote() {
     if (!noteText.trim()) {
-      Alert.alert('Nota vacía', 'Por favor escribe algo en la nota');
+      Alert.alert('Nota vacía', 'Escribe algo antes de guardar');
       return;
     }
-
+    
     await addAngerNote(noteText.trim());
-    Alert.alert('✓ Nota Guardada', 'Tu nota de enojo ha sido registrada');
     setNoteText('');
     await refresh();
   }
@@ -169,7 +170,15 @@ export default function App(){
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>📊 Registro de Enojo</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.title}>📊 Registro de Enojo</Text>
+          <TouchableOpacity 
+            style={styles.historyButton}
+            onPress={() => setShowHistory(true)}
+          >
+            <Text style={styles.historyButtonText}>📅 Historial</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={styles.subtitle}>Lleva un control de tus emociones</Text>
       </View>
 
@@ -287,28 +296,21 @@ export default function App(){
                     const dateStr = date.toLocaleDateString('es', { 
                       day: '2-digit', 
                       month: 'short', 
-                      year: 'numeric' 
-                    });
-                    const timeStr = date.toLocaleTimeString('es', { 
                       hour: '2-digit', 
                       minute: '2-digit' 
                     });
-
+                    
                     return (
-                      <View key={note.id} style={styles.noteItem}>
-                        <View style={styles.noteContent}>
-                          <View style={styles.noteHeader}>
-                            <Text style={styles.noteDateText}>📅 {dateStr}</Text>
-                            <Text style={styles.noteTimeText}>🕐 {timeStr}</Text>
-                          </View>
-                          <Text style={styles.noteText}>{note.note}</Text>
+                      <View key={note.id} style={styles.noteCard}>
+                        <View style={styles.noteHeader}>
+                          <Text style={styles.noteDate}>{dateStr}</Text>
+                          <TouchableOpacity
+                            onPress={() => onDeleteNote(note.id, note.note, note.ts)}
+                          >
+                            <Text style={styles.deleteNoteButton}>🗑️</Text>
+                          </TouchableOpacity>
                         </View>
-                        <TouchableOpacity 
-                          style={styles.deleteNoteButton}
-                          onPress={() => onDeleteNote(note.id, note.note, note.ts)}
-                        >
-                          <Text style={styles.deleteButtonText}>🗑️</Text>
-                        </TouchableOpacity>
+                        <Text style={styles.noteText}>{note.note}</Text>
                       </View>
                     );
                   })}
@@ -380,6 +382,11 @@ export default function App(){
 
         <View style={{height: 20}} />
       </ScrollView>
+      
+      <HistoryNavigator 
+        visible={showHistory}
+        onClose={() => setShowHistory(false)}
+      />
     </View>
   );
 }
@@ -438,6 +445,22 @@ const styles = StyleSheet.create({
     color: '#999',
     marginBottom: 12,
   },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  historyButton: {
+    backgroundColor: '#4c9',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  historyButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   sliderContainer: {
     marginVertical: 16,
     paddingHorizontal: 8,
@@ -475,6 +498,62 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  noteInputContainer: {
+    marginVertical: 12,
+  },
+  noteInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    minHeight: 100,
+    backgroundColor: '#f9f9f9',
+  },
+  saveNoteButton: {
+    backgroundColor: '#4c9',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  saveNoteText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  notesSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  notesList: {
+    marginTop: 12,
+  },
+  noteCard: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+  },
+  noteHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  noteDate: {
+    fontSize: 12,
+    color: '#999',
+  },
+  deleteNoteButton: {
+    fontSize: 18,
+  },
+  noteText: {
+    fontSize: 14,
+    color: '#333',
+    lineHeight: 20,
   },
   inputRow: {
     flexDirection: 'row',
@@ -612,86 +691,5 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     fontSize: 18,
-  },
-  noteInputContainer: {
-    marginTop: 12,
-    marginBottom: 16,
-  },
-  noteInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 14,
-    backgroundColor: '#f9f9f9',
-    minHeight: 100,
-    marginBottom: 12,
-  },
-  saveNoteButton: {
-    backgroundColor: '#4c9',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  saveNoteText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  notesSubtitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  notesList: {
-    marginTop: 8,
-  },
-  noteItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    backgroundColor: '#fffbf0',
-    borderRadius: 10,
-    borderLeftWidth: 4,
-    borderLeftColor: '#ff9800',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  noteContent: {
-    flex: 1,
-    marginRight: 8,
-  },
-  noteHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 12,
-  },
-  noteDateText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
-  },
-  noteTimeText: {
-    fontSize: 12,
-    color: '#999',
-  },
-  noteText: {
-    fontSize: 14,
-    color: '#333',
-    lineHeight: 20,
-  },
-  deleteNoteButton: {
-    padding: 8,
-    backgroundColor: '#fff',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#ff4444',
-    alignSelf: 'flex-start',
   },
 });
