@@ -134,7 +134,7 @@ export async function lastSemestersAverages(): Promise<SemesterAvg[]> {
 }
 
 // Nueva función para obtener estadísticas de los últimos 7 días
-type DayAvg = { label: string; avg: number };
+export type DayAvg = { label: string; avg: number; date: Date; count: number };
 
 export async function last7DaysAverages(): Promise<DayAvg[]> {
   const days: DayAvg[] = [];
@@ -147,8 +147,8 @@ export async function last7DaysAverages(): Promise<DayAvg[]> {
     const start = startOfDay(date);
     const end = endOfDay(date);
     
-    const result = await db.getAllAsync<{ avg: number }>(
-      'SELECT AVG(intensity) as avg FROM entries WHERE ts BETWEEN ? AND ?',
+    const result = await db.getAllAsync<{ avg: number; cnt: number }>(
+      'SELECT AVG(intensity) as avg, COUNT(*) as cnt FROM entries WHERE ts BETWEEN ? AND ?',
       [start, end]
     );
     
@@ -158,11 +158,56 @@ export async function last7DaysAverages(): Promise<DayAvg[]> {
     
     days.push({
       label: dayLabel,
-      avg: result[0]?.avg ? Number(Number(result[0].avg).toFixed(2)) : 0
+      avg: result[0]?.avg ? Number(Number(result[0].avg).toFixed(2)) : 0,
+      date: new Date(date),
+      count: result[0]?.cnt ? Number(result[0].cnt) : 0
     });
   }
   
   return days;
+}
+
+// Función para obtener estadísticas de una semana específica (offsetWeeks = 0 para semana actual, 1 para anterior, etc)
+export async function getWeekStats(offsetWeeks: number = 0): Promise<DayAvg[]> {
+  const days: DayAvg[] = [];
+  const now = new Date();
+  
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - i - (offsetWeeks * 7));
+    
+    const start = startOfDay(date);
+    const end = endOfDay(date);
+    
+    const result = await db.getAllAsync<{ avg: number; cnt: number }>(
+      'SELECT AVG(intensity) as avg, COUNT(*) as cnt FROM entries WHERE ts BETWEEN ? AND ?',
+      [start, end]
+    );
+    
+    const dayLabel = date.toLocaleString('es', { weekday: 'short', day: 'numeric', month: 'short' });
+    
+    days.push({
+      label: dayLabel,
+      avg: result[0]?.avg ? Number(Number(result[0].avg).toFixed(2)) : 0,
+      date: new Date(date),
+      count: result[0]?.cnt ? Number(result[0].cnt) : 0
+    });
+  }
+  
+  return days;
+}
+
+// Función para obtener notas de un día específico
+export async function getNotesForDay(date: Date): Promise<AngerNote[]> {
+  const start = startOfDay(date);
+  const end = endOfDay(date);
+  
+  const result = await db.getAllAsync<AngerNote>(
+    'SELECT id, ts, note FROM anger_notes WHERE ts BETWEEN ? AND ? ORDER BY ts DESC',
+    [start, end]
+  );
+  
+  return result;
 }
 
 // Nueva función para obtener estadísticas del último mes (30 días)

@@ -1,8 +1,34 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 
-// data: [{label, value}] donde value es 0..10
-export default function BarChart({ title, data }:{ title:string; data:{label:string, value:number}[] }){
+type BarData = { 
+  label: string; 
+  value: number; 
+  date?: Date;
+  count?: number;
+};
+
+type BarChartProps = { 
+  title: string; 
+  data: BarData[];
+  onBarPress?: (item: BarData, index: number) => void;
+  showNavigation?: boolean;
+  onNavigatePrev?: () => void;
+  onNavigateNext?: () => void;
+  canNavigatePrev?: boolean;
+  canNavigateNext?: boolean;
+};
+
+export default function BarChart({ 
+  title, 
+  data, 
+  onBarPress,
+  showNavigation = false,
+  onNavigatePrev,
+  onNavigateNext,
+  canNavigatePrev = true,
+  canNavigateNext = false
+}: BarChartProps) {
   const max = 10;
   
   if (data.length === 0) {
@@ -16,18 +42,59 @@ export default function BarChart({ title, data }:{ title:string; data:{label:str
   
   return (
     <View style={styles.container}>
-      {title ? <Text style={styles.title}>{title}</Text> : null}
+      <View style={styles.header}>
+        {showNavigation && onNavigatePrev && (
+          <TouchableOpacity 
+            onPress={onNavigatePrev}
+            disabled={!canNavigatePrev}
+            style={[styles.navButton, !canNavigatePrev && styles.navButtonDisabled]}
+          >
+            <Text style={[styles.navButtonText, !canNavigatePrev && styles.navButtonTextDisabled]}>
+              ← Anterior
+            </Text>
+          </TouchableOpacity>
+        )}
+        {title ? <Text style={styles.title}>{title}</Text> : null}
+        {showNavigation && onNavigateNext && (
+          <TouchableOpacity 
+            onPress={onNavigateNext}
+            disabled={!canNavigateNext}
+            style={[styles.navButton, !canNavigateNext && styles.navButtonDisabled]}
+          >
+            <Text style={[styles.navButtonText, !canNavigateNext && styles.navButtonTextDisabled]}>
+              Siguiente →
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
       <View style={styles.chartContainer}>
         {data.map((d, i) => {
           const value = Math.max(0, Math.min(10, d.value || 0));
           const h = (value / max) * 120; // altura máxima 120px
-          const barColor = value >= 7 ? '#ff4444' : value >= 4 ? '#ffaa00' : '#44cc99';
+          const barColor = value >= 7 ? '#ff6666' : value >= 4 ? '#ffaa66' : '#66dd99';
           
-          return (
+          return onBarPress ? (
+            <TouchableOpacity 
+              key={i} 
+              style={styles.barWrapper}
+              onPress={() => onBarPress(d, i)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.valueText}>{value > 0 ? value.toFixed(1) : ''}</Text>
+              <View style={[styles.bar, { height: Math.max(4, h), backgroundColor: barColor }]} />
+              <Text style={styles.labelText}>{d.label}</Text>
+              {d.count !== undefined && d.count > 0 && (
+                <Text style={styles.countText}>({d.count})</Text>
+              )}
+            </TouchableOpacity>
+          ) : (
             <View key={i} style={styles.barWrapper}>
               <Text style={styles.valueText}>{value > 0 ? value.toFixed(1) : ''}</Text>
               <View style={[styles.bar, { height: Math.max(4, h), backgroundColor: barColor }]} />
               <Text style={styles.labelText}>{d.label}</Text>
+              {d.count !== undefined && d.count > 0 && (
+                <Text style={styles.countText}>({d.count})</Text>
+              )}
             </View>
           );
         })}
@@ -40,11 +107,36 @@ const styles = StyleSheet.create({
   container: {
     marginTop: 8,
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  navButton: {
+    backgroundColor: '#8d1a1a',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  navButtonDisabled: {
+    backgroundColor: '#5d2a2a',
+    opacity: 0.5,
+  },
+  navButtonText: {
+    color: '#ffcccc',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  navButtonTextDisabled: {
+    color: '#999',
+  },
   title: {
     fontWeight: '700',
     fontSize: 16,
-    marginBottom: 12,
-    color: '#333',
+    color: '#fff',
+    flex: 1,
+    textAlign: 'center',
   },
   chartContainer: {
     flexDirection: 'row',
@@ -61,7 +153,7 @@ const styles = StyleSheet.create({
   valueText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#666',
+    color: '#ffcccc',
     marginBottom: 4,
     minHeight: 14,
   },
@@ -73,13 +165,18 @@ const styles = StyleSheet.create({
   },
   labelText: {
     fontSize: 10,
-    color: '#999',
+    color: '#ffaaaa',
     marginTop: 4,
     textAlign: 'center',
   },
+  countText: {
+    fontSize: 9,
+    color: '#ff8888',
+    marginTop: 2,
+  },
   emptyText: {
     fontSize: 14,
-    color: '#999',
+    color: '#ffaaaa',
     fontStyle: 'italic',
     textAlign: 'center',
     paddingVertical: 20,

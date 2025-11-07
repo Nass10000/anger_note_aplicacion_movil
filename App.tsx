@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Button, Alert, TextInput, Platform, StatusBar, ScrollView, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, Button, Alert, TextInput, Platform, StatusBar, ScrollView, StyleSheet, TouchableOpacity, FlatList, Modal } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { initDB, addEntry, statsToday, last7DaysAverages, last30DaysAverage, last3MonthsAverages, last6MonthsAverages, lastYearAverages, getAllEntries, deleteEntry, deleteAllEntries, Entry, addAngerNote, getAllAngerNotes, deleteAngerNote, deleteAllAngerNotes, AngerNote } from './src/db';
+import { initDB, addEntry, statsToday, getWeekStats, last30DaysAverage, last3MonthsAverages, last6MonthsAverages, lastYearAverages, getAllEntries, deleteEntry, deleteAllEntries, Entry, addAngerNote, getAllAngerNotes, deleteAngerNote, deleteAllAngerNotes, AngerNote, getNotesForDay, DayAvg } from './src/db';
+import { initToolsDB } from './src/toolsDb';
 import BarChart from './src/components/BarChart';
 import AuthScreen from './src/components/AuthScreen';
 import HistoryNavigator from './src/components/HistoryNavigator';
+import ToolsSection from './src/components/ToolsSection';
 
 export default function App(){
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [intensity, setIntensity] = useState('5');
   const [today, setToday] = useState<{count:number; avg:number}>({count:0, avg:0});
-  const [week, setWeek] = useState<{label:string, avg:number}[]>([]);
+  const [week, setWeek] = useState<DayAvg[]>([]);
+  const [weekOffset, setWeekOffset] = useState(0);
   const [month30, setMonth30] = useState<{label:string, avg:number}>({label: '', avg: 0});
   const [m3, setM3] = useState<{label:string, avg:number}[]>([]);
   const [m6, setM6] = useState<{label:string, avg:number}[]>([]);
@@ -21,10 +24,12 @@ export default function App(){
   const [showNotes, setShowNotes] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+  const [showDayDetails, setShowDayDetails] = useState(false);
+  const [selectedDayData, setSelectedDayData] = useState<{date: Date; entries: Entry[]; notes: AngerNote[]; avg: number; count: number} | null>(null);
 
   async function refresh(){
     setToday(await statsToday());
-    setWeek(await last7DaysAverages());
+    await loadWeekData(weekOffset);
     setMonth30(await last30DaysAverage());
     setM3(await last3MonthsAverages());
     setM6(await last6MonthsAverages());
@@ -33,11 +38,57 @@ export default function App(){
     setAngerNotes(await getAllAngerNotes());
   }
 
+  async function loadWeekData(offset: number) {
+    const weekData = await getWeekStats(offset);
+    setWeek(weekData);
+  }
+
   useEffect(() => { 
     if (isAuthenticated) {
-      (async () => { await initDB(); await refresh(); })(); 
+      (async () => { 
+        await initDB(); 
+        await initToolsDB();
+        await refresh(); 
+      })(); 
     }
   }, [isAuthenticated]);
+
+  async function handleWeekNavigate(direction: 'prev' | 'next') {
+    const newOffset = direction === 'prev' ? weekOffset + 1 : weekOffset - 1;
+    setWeekOffset(newOffset);
+    await loadWeekData(newOffset);
+  }
+
+  async function handleBarPress(barData: {label: string; value: number; date?: Date; count?: number}) {
+    if (!barData.date || (barData.count ?? 0) === 0) {
+      Alert.alert('Sin datos', 'No hay registros en este día');
+      return;
+    }
+
+    // Obtener registros del día
+    const dayEntries = await getAllEntries();
+    const startOfDay = new Date(barData.date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(barData.date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const filteredEntries = dayEntries.filter(e => {
+      const entryDate = new Date(e.ts);
+      return entryDate >= startOfDay && entryDate <= endOfDay;
+    });
+
+    // Obtener notas del día
+    const dayNotes = await getNotesForDay(barData.date);
+
+    setSelectedDayData({
+      date: barData.date,
+      entries: filteredEntries,
+      notes: dayNotes,
+      avg: barData.value,
+      count: barData.count ?? 0
+    });
+    setShowDayDetails(true);
+  }
 
   async function onSave(){
     const n = Math.max(1, Math.min(10, Number(intensity) || 5));
@@ -196,9 +247,9 @@ export default function App(){
               step={1}
               value={Number(intensity)}
               onValueChange={(value) => setIntensity(value.toString())}
-              minimumTrackTintColor="#4c9"
-              maximumTrackTintColor="#ddd"
-              thumbTintColor="#4c9"
+              minimumTrackTintColor="#ff6666"
+              maximumTrackTintColor="#5d2a2a"
+              thumbTintColor="#ff6666"
             />
             <View style={styles.sliderLabels}>
               <Text style={styles.sliderLabelText}>1</Text>
@@ -222,8 +273,19 @@ export default function App(){
         </View>
 
         <View style={styles.statsCard}>
-          <BarChart title='� Última semana (7 días)' data={week.map((x: {label: string, avg: number}) => ({label: x.label, value: x.avg}))} />
+          <BarChart 
+            title={weekOffset === 0 ? '📅 Última semana (7 días)' : `📅 Semana hace ${weekOffset} ${weekOffset === 1 ? 'semana' : 'semanas'}`}
+            data={week.map((x: DayAvg) => ({label: x.label, value: x.avg, date: x.date, count: x.count}))}
+            onBarPress={handleBarPress}
+            showNavigation={true}
+            onNavigatePrev={() => handleWeekNavigate('prev')}
+            onNavigateNext={() => handleWeekNavigate('next')}
+            canNavigatePrev={true}
+            canNavigateNext={weekOffset > 0}
+          />
         </View>
+
+        <ToolsSection />
 
         <View style={styles.statsCard}>
           <Text style={styles.sectionTitle}>�📊 Últimos 30 días</Text>
@@ -387,6 +449,89 @@ export default function App(){
         visible={showHistory}
         onClose={() => setShowHistory(false)}
       />
+
+      <Modal
+        visible={showDayDetails}
+        animationType="slide"
+        onRequestClose={() => setShowDayDetails(false)}
+        transparent={true}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                📅 {selectedDayData?.date.toLocaleDateString('es', { 
+                  weekday: 'long', 
+                  day: 'numeric', 
+                  month: 'long',
+                  year: 'numeric'
+                })}
+              </Text>
+              <TouchableOpacity onPress={() => setShowDayDetails(false)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalStats}>
+              <Text style={styles.modalStatsText}>
+                Registros: <Text style={styles.modalStatsBold}>{selectedDayData?.count}</Text>
+              </Text>
+              <Text style={styles.modalStatsText}>
+                Promedio: <Text style={styles.modalStatsBold}>{selectedDayData?.avg.toFixed(1)}/10</Text>
+              </Text>
+            </View>
+
+            <ScrollView style={styles.modalScroll}>
+              {selectedDayData && selectedDayData.entries.length > 0 && (
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionTitle}>📊 Registros del día</Text>
+                  {selectedDayData.entries.map((entry) => {
+                    const time = new Date(entry.ts).toLocaleTimeString('es', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    });
+                    return (
+                      <View key={entry.id} style={styles.modalEntry}>
+                        <Text style={styles.modalEntryTime}>{time}</Text>
+                        <Text style={styles.modalEntryIntensity}>{entry.intensity}/10</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {selectedDayData && selectedDayData.notes.length > 0 && (
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionTitle}>📝 Notas del día</Text>
+                  {selectedDayData.notes.map((note) => {
+                    const time = new Date(note.ts).toLocaleTimeString('es', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    });
+                    return (
+                      <View key={note.id} style={styles.modalNote}>
+                        <Text style={styles.modalNoteTime}>{time}</Text>
+                        <Text style={styles.modalNoteText}>{note.note}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {selectedDayData && selectedDayData.entries.length === 0 && selectedDayData.notes.length === 0 && (
+                <Text style={styles.modalEmpty}>No hay registros ni notas en este día</Text>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity 
+              style={styles.modalCloseButton}
+              onPress={() => setShowDayDetails(false)}
+            >
+              <Text style={styles.modalCloseButtonText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -395,28 +540,28 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 44,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#2a0a0a',
   },
   header: {
-    backgroundColor: '#fff',
+    backgroundColor: '#3d1a1a',
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: '#5d2a2a',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
   },
   title: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#333',
+    color: '#fff',
   },
   subtitle: {
     fontSize: 14,
-    color: '#666',
+    color: '#ffaaaa',
     marginTop: 4,
   },
   scrollView: {
@@ -424,25 +569,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   inputCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#3d1a1a',
     borderRadius: 12,
     padding: 20,
     marginTop: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: '#5d2a2a',
   },
   inputLabel: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: '#fff',
     marginBottom: 4,
   },
   inputHint: {
     fontSize: 12,
-    color: '#999',
+    color: '#ffaaaa',
     marginBottom: 12,
   },
   headerTop: {
@@ -451,7 +598,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   historyButton: {
-    backgroundColor: '#4c9',
+    backgroundColor: '#8d1a1a',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -468,7 +615,7 @@ const styles = StyleSheet.create({
   sliderValue: {
     fontSize: 48,
     fontWeight: '800',
-    color: '#4c9',
+    color: '#ff6666',
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -484,11 +631,11 @@ const styles = StyleSheet.create({
   },
   sliderLabelText: {
     fontSize: 12,
-    color: '#999',
+    color: '#ffaaaa',
     fontWeight: '600',
   },
   saveButton: {
-    backgroundColor: '#4c9',
+    backgroundColor: '#bd2a2a',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -504,15 +651,16 @@ const styles = StyleSheet.create({
   },
   noteInput: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#5d2a2a',
     borderRadius: 12,
     padding: 12,
     fontSize: 14,
     minHeight: 100,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#5d2a2a',
+    color: '#fff',
   },
   saveNoteButton: {
-    backgroundColor: '#4c9',
+    backgroundColor: '#bd2a2a',
     borderRadius: 12,
     padding: 14,
     alignItems: 'center',
@@ -526,13 +674,13 @@ const styles = StyleSheet.create({
   notesSubtitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: '#fff',
   },
   notesList: {
     marginTop: 12,
   },
   noteCard: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#5d2a2a',
     borderRadius: 10,
     padding: 12,
     marginBottom: 10,
@@ -545,14 +693,14 @@ const styles = StyleSheet.create({
   },
   noteDate: {
     fontSize: 12,
-    color: '#999',
+    color: '#ffaaaa',
   },
   deleteNoteButton: {
     fontSize: 18,
   },
   noteText: {
     fontSize: 14,
-    color: '#333',
+    color: '#ffdddd',
     lineHeight: 20,
   },
   inputRow: {
@@ -562,43 +710,46 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 2,
-    borderColor: '#4c9',
+    borderColor: '#ff6666',
     borderRadius: 10,
     padding: 12,
     width: 80,
     fontSize: 20,
     fontWeight: '700',
     textAlign: 'center',
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#5d2a2a',
+    color: '#fff',
   },
   buttonWrapper: {
     flex: 1,
   },
   statsCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#3d1a1a',
     borderRadius: 12,
     padding: 16,
     marginTop: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: '#5d2a2a',
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#333',
+    color: '#fff',
     marginBottom: 8,
   },
   statsText: {
     fontSize: 14,
-    color: '#666',
+    color: '#ffcccc',
     marginBottom: 8,
   },
   statsBold: {
     fontWeight: '700',
-    color: '#4c9',
+    color: '#ff6666',
   },
   entryHeader: {
     flexDirection: 'row',
@@ -608,7 +759,7 @@ const styles = StyleSheet.create({
   },
   toggleButton: {
     fontSize: 14,
-    color: '#4c9',
+    color: '#ff8888',
     fontWeight: '600',
   },
   entryActions: {
@@ -618,15 +769,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: '#5d2a2a',
   },
   entryCount: {
     fontSize: 14,
-    color: '#666',
+    color: '#ffcccc',
     fontWeight: '600',
   },
   deleteAllButton: {
-    backgroundColor: '#ff4444',
+    backgroundColor: '#8d1a1a',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
@@ -638,7 +789,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#999',
+    color: '#ffaaaa',
     textAlign: 'center',
     paddingVertical: 20,
     fontStyle: 'italic',
@@ -653,10 +804,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     marginBottom: 8,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#5d2a2a',
     borderRadius: 8,
     borderLeftWidth: 4,
-    borderLeftColor: '#4c9',
+    borderLeftColor: '#ff6666',
   },
   entryInfo: {
     flexDirection: 'row',
@@ -666,7 +817,7 @@ const styles = StyleSheet.create({
   entryIntensity: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#4c9',
+    color: '#ff6666',
     width: 50,
   },
   entryDate: {
@@ -674,22 +825,137 @@ const styles = StyleSheet.create({
   },
   entryDateText: {
     fontSize: 14,
-    color: '#333',
+    color: '#fff',
     fontWeight: '600',
   },
   entryTimeText: {
     fontSize: 12,
-    color: '#999',
+    color: '#ffaaaa',
     marginTop: 2,
   },
   deleteButton: {
     padding: 8,
-    backgroundColor: '#fff',
+    backgroundColor: '#3d1a1a',
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#ff4444',
+    borderColor: '#8d1a1a',
   },
   deleteButtonText: {
     fontSize: 18,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#3d1a1a',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#5d2a2a',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+    flex: 1,
+  },
+  modalClose: {
+    fontSize: 24,
+    color: '#ffaaaa',
+    paddingLeft: 10,
+  },
+  modalStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    padding: 16,
+    backgroundColor: '#5d2a2a',
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 10,
+  },
+  modalStatsText: {
+    fontSize: 14,
+    color: '#ffcccc',
+  },
+  modalStatsBold: {
+    fontWeight: '700',
+    color: '#ff6666',
+  },
+  modalScroll: {
+    maxHeight: 400,
+    paddingHorizontal: 20,
+  },
+  modalSection: {
+    marginTop: 16,
+  },
+  modalSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 12,
+  },
+  modalEntry: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#5d2a2a',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  modalEntryTime: {
+    fontSize: 14,
+    color: '#ffcccc',
+  },
+  modalEntryIntensity: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ff6666',
+  },
+  modalNote: {
+    padding: 12,
+    backgroundColor: '#5d2a2a',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  modalNoteTime: {
+    fontSize: 12,
+    color: '#ffaaaa',
+    marginBottom: 6,
+  },
+  modalNoteText: {
+    fontSize: 14,
+    color: '#ffdddd',
+    lineHeight: 20,
+  },
+  modalEmpty: {
+    fontSize: 14,
+    color: '#ffaaaa',
+    textAlign: 'center',
+    paddingVertical: 40,
+    fontStyle: 'italic',
+  },
+  modalCloseButton: {
+    backgroundColor: '#8d1a1a',
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+  },
+  modalCloseButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
